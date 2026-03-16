@@ -27,13 +27,16 @@ const char* ROVER_ID = "1"; // Define the constant ID here
 #include <Adafruit_ST7735.h>
 #include "Adafruit_miniTFTWing.h"
 
+
+
 Adafruit_miniTFTWing ss;
 #define TFT_RST -1  // we use the seesaw for resetting to save a pin
 #define TFT_CS 5
 #define TFT_DC 6
 Adafruit_ST7735 tft_7735 = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 Adafruit_ST77xx *tft = NULL;
-
+unsigned long startTime;
+bool hasSentStop = false;
 
 #include "comms.h"
 
@@ -102,16 +105,36 @@ void cycleBasicCommands() {
   waitForReply();
 }
 
+// This function will run super fast, so that it can stop as soon as you stop pressing any buttons
+// The movement function will run slower as to not spam the lora network
+void transmitStopCommand(){
+  uint32_t buttons = ss.readButtons();
+  
+  if (buttons == 3740 & hasSentStop == false){
+    for (int i = 0; i <= 2; i++){ 
+    transmitData("stop", ROVER_ID);
+  }
+    hasSentStop = true;
+    return;
+  }
+
+}
+
 void transmitButtonCommands() {
   uint32_t buttons = ss.readButtons();
 
   uint16_t color;
+
+
+  // 3740 is the value that is printed when no buttons are pressed, the number is changed when buttons are pressed.
+  // not sure exactly what the number means yet, to be investigated
 
   color = ST77XX_BLACK;
   if (!(buttons & TFTWING_BUTTON_LEFT)) {
     // Serial.println("LEFT");
     color = ST77XX_WHITE;
     transmitData("left", ROVER_ID);
+    hasSentStop = false;
   }
 
   tft->fillTriangle(150, 30, 150, 50, 160, 40, color);
@@ -122,6 +145,7 @@ void transmitButtonCommands() {
     // Serial.println("RIGHT");
     color = ST77XX_WHITE;
     transmitData("right", ROVER_ID);
+    hasSentStop = false;
   }
 
   tft->fillTriangle(120, 30, 120, 50, 110, 40, color);
@@ -129,9 +153,10 @@ void transmitButtonCommands() {
 
   color = ST77XX_BLACK;
   if (!(buttons & TFTWING_BUTTON_DOWN)) {
-    Serial.println("DOWN");
+    // Serial.println("DOWN");
     color = ST77XX_WHITE;
     transmitData("backward", ROVER_ID);
+    hasSentStop = false;
   }
 
   tft->fillTriangle(125, 26, 145, 26, 135, 16, color);
@@ -142,6 +167,7 @@ void transmitButtonCommands() {
     // Serial.println("UP");
     color = ST77XX_WHITE;
     transmitData("forward", ROVER_ID);
+    hasSentStop = false;
   }
 
   tft->fillTriangle(125, 53, 145, 53, 135, 63, color);
@@ -152,6 +178,7 @@ void transmitButtonCommands() {
     // Serial.println("A");
     color = ST7735_GREEN;
     transmitData("beep", ROVER_ID);
+    hasSentStop = false;
   }
 
   tft->fillCircle(30, 57, 10, color);
@@ -171,10 +198,12 @@ void transmitButtonCommands() {
     // Serial.println("SELECT");
     color = ST77XX_RED;
     transmitData("beepTwice", ROVER_ID);
+    hasSentStop = false;
   }
 
   tft->fillCircle(135, 40, 7, color);
   waitForReply();
+  
 }
 
 
@@ -195,11 +224,17 @@ void setup() {
 
 // Main loop runs repeatedly after setup
 void loop() {
+  unsigned long currentTime = millis();
+  unsigned long elapsedTime = currentTime - startTime;
+  if (elapsedTime >= 300){
+    transmitButtonCommands();
+    startTime = currentTime; 
+  }
+  transmitStopCommand();
   // Uncomment one of the following for debugging transmission
 
   // debugTransmissionSimple();  // Send a test message
   // debugTransmissionButton();    // Send message when button is pressed
   // cycleBasicCommands();
-  transmitButtonCommands();
   delay(10);  // Wait 1 second before next loop iteration
 }

@@ -10,8 +10,12 @@
 
 // Set to true to enable Serial comms.
 // set to false to stop all serial comms.
+
+
 #define DEBUG false //This makes the device not work until you open the serial monitor, only use when you need to debug
 //otherwise turn off for devices not connected to a computer
+
+
 const int buzzer = 10;  //buzzer to arduino pin 10
 
 // --- NEW CONSTANT DEFINITION ---
@@ -27,6 +31,8 @@ Adafruit_ADT7410 tempsensor = Adafruit_ADT7410();
 // https://adafruit.github.io/arduino-board-index/package_adafruit_index.json
 // https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
 
+
+
 #include "comms.h"
 
 // For use with the onboard Neopixel (RGB LED)
@@ -40,6 +46,18 @@ Adafruit_DCMotor *motorLeft = AFMS.getMotor(1); //testing this not final
 Adafruit_DCMotor *motorBackLeft = AFMS.getMotor(2);
 Adafruit_DCMotor *motorBackRight = AFMS.getMotor(3);
 Adafruit_DCMotor *motorRight = AFMS.getMotor(4); //testing this not final
+
+// Command definitions
+String test_command = String(ROVER_ID) + ",test";
+String forward_command = String(ROVER_ID) + ",forward";
+String right_command = String(ROVER_ID) + ",right";
+String start_command = String(ROVER_ID) + ",start";
+String left_command = String(ROVER_ID) + ",left";
+String stop_command = String(ROVER_ID) + ",stop";
+String beep_command = String(ROVER_ID) + ",beep";
+String backward_command = String(ROVER_ID) + ",backward";
+
+unsigned long startTime;
 
 void initialiseTemperatureMotionWing() {
   if (!tempsensor.begin()) {
@@ -121,80 +139,34 @@ void commandTest() {
   pixels.show();
 }
 
-
-
 void commandForward() {
-  motorLeft->setSpeed(150);
-  motorRight->setSpeed(150);
-  motorBackLeft->setSpeed(150); //testing this not final
-  motorBackRight->setSpeed(150); //testing this not final
-
-
   motorLeft->run(FORWARD);
   motorRight->run(FORWARD);
   motorBackLeft->run(FORWARD); //testing this not final
   motorBackRight->run(FORWARD); //testing this not final
-  delay(100);  // Runs the motors for 1 second
-
-  // Stops the motors
-  motorLeft->run(RELEASE);
-  motorRight->run(RELEASE);
-  motorBackLeft->run(RELEASE); //testing this not final
-  motorBackRight->run(RELEASE); //testing this not final
 }
 
 void commandBackward() {
-  motorLeft->setSpeed(150);
-  motorRight->setSpeed(150);
-
   motorLeft->run(BACKWARD);
   motorRight->run(BACKWARD);
   motorBackLeft->run(BACKWARD); //testing this not final
   motorBackRight->run(BACKWARD); //testing this not final
-  delay(100);  // Runs the motors for 1 second
-
-  // Stops the motors
-  motorLeft->run(RELEASE);
-  motorRight->run(RELEASE);
-  motorBackLeft->run(RELEASE); //testing this not final
-  motorBackRight->run(RELEASE); //testing this not final
 }
 
 
 void commandRight() {
-  motorLeft->setSpeed(150);
-  motorRight->setSpeed(150);
-
   motorLeft->run(FORWARD);
   motorRight->run(BACKWARD);
   motorBackLeft->run(FORWARD); //testing this not final
   motorBackRight->run(BACKWARD); //testing this not final
-  delay(100);  // Runs the motors for 1 second
-
-  // Stops the motors
-  motorLeft->run(RELEASE);
-  motorRight->run(RELEASE);
-  motorBackLeft->run(RELEASE); //testing this not final
-  motorBackRight->run(RELEASE); //testing this not final
 }
 
 
 void commandLeft() {
-  motorLeft->setSpeed(150);
-  motorRight->setSpeed(150);
-
-
   motorLeft->run(BACKWARD);
   motorRight->run(FORWARD);
   motorBackLeft->run(BACKWARD); //testing this not final
   motorBackRight->run(FORWARD); //testing this not final
-  delay(100);  // Runs the motors for 1 second
-
-  // Stops the motors
-  motorLeft->run(RELEASE);
-  motorRight->run(RELEASE);
-  motorBackLeft->run(RELEASE); //testing this not final
-  motorBackRight->run(RELEASE); //testing this not final
 }
 
 void commandStop() {
@@ -235,6 +207,14 @@ void setup() {
   // pinMode(PIN_NEOPIXEL, OUTPUT);
   pixels.begin();             // INITIALIZE NeoPixel strip object (REQUIRED)
   pixels.setBrightness(100);  // Set brightness (0-255)
+
+  //set speed of motors once, this could be variable to add configurable speed
+  motorLeft->setSpeed(150);
+  motorRight->setSpeed(150);
+  motorBackLeft->setSpeed(150); 
+  motorBackRight->setSpeed(150); 
+
+  startTime = millis();
 }
 
 
@@ -242,45 +222,58 @@ void setup() {
 void loop() {
   // readGPS();
   // transmitData("test");
+  unsigned long currentTime = millis();
+  unsigned long elapsedTime = currentTime - startTime;
+
   String command = waitForReply();
   if (DEBUG) {
     Serial.println(command);
   }
 
-  String test_command = String(ROVER_ID) + ",test";
-  String forward_command = String(ROVER_ID) + ",forward";
-  String right_command = String(ROVER_ID) + ",right";
-  String start_command = String(ROVER_ID) + ",start";
-  String left_command = String(ROVER_ID) + ",left";
-  String stop_command = String(ROVER_ID) + ",stop";
-  String beep_command = String(ROVER_ID) + ",beep";
-  String backward_command = String(ROVER_ID) + ",backward";
-
   if (command == test_command) {  // UPDATED TO USE ROVER_ID
     commandTest();
+    startTime = currentTime; 
   }
-  if (command == forward_command) {  // UPDATED TO USE ROVER_ID
+  else if (command == forward_command) {  // UPDATED TO USE ROVER_ID
     commandForward();
+    startTime = currentTime; 
   }
-  if (command == right_command) {  // UPDATED TO USE ROVER_ID
+  else if (command == right_command) {  // UPDATED TO USE ROVER_ID
     commandRight();
+    startTime = currentTime; 
   }
-  if (command == start_command) {  // UPDATED TO USE ROVER_ID
+  else if (command == start_command) {  // UPDATED TO USE ROVER_ID
     commandStart();
+    startTime = currentTime; 
   }
-  if (command == left_command) {  // UPDATED TO USE ROVER_ID
+  else if (command == left_command) {  // UPDATED TO USE ROVER_ID
     commandLeft();
+    startTime = currentTime; 
   }
-  if (command == stop_command) {  // UPDATED TO USE ROVER_ID
-    commandStop();
-  }
-  if (command == beep_command) {  // UPDATED TO USE ROVER_ID
+  else if (command == beep_command) {  // UPDATED TO USE ROVER_ID
     commandBeep();
+    startTime = currentTime; 
   }
-  if (command == backward_command) {  // UPDATED TO USE ROVER_ID
+  else if (command == backward_command) {  // UPDATED TO USE ROVER_ID
     commandBackward();
+    startTime = currentTime; 
+  }
+    // This is suppose to stop the rover if nothing has been recieved for 1 seconds, all checks should fail meaning no valid command up until this point
+  else if (elapsedTime >= 1000){
+    commandStop();
+    startTime = currentTime; 
   }
 
+  // Always check if we need to stop as a safety measure
+  if (command == stop_command) {  
+    commandStop();
+  }
+
+
+
+  
+
+  
   // transmitTemperature();
   delay(10);
 }
