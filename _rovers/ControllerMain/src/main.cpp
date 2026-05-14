@@ -37,6 +37,8 @@ Adafruit_ST7735 tft_7735 = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 Adafruit_ST77xx *tft = NULL;
 unsigned long startTime;
 bool hasSentStop = false;
+int selectedOption = 0;
+String currentMenu = "mainMenu";
 
 #include "comms.h"
 int currentRoverID = 1; //This is a debug command; remove if its not working.
@@ -57,7 +59,7 @@ void initialiseTFT() {
   ss.setBacklight(TFTWING_BACKLIGHT_ON);  // turn off the backlight
   tft_7735.initR(INITR_MINI160x80);       // initialize a ST7735S chip, mini display
   tft = &tft_7735;
-  tft->setRotation(1);
+  tft->setRotation(3);
     tft->fillScreen(ST77XX_BLACK);
 
   if (DEBUG) {
@@ -124,7 +126,7 @@ void transmitStopCommand(){
 
 }
 
-void transmitButtonCommands() {
+void buttonTransmit() {
   uint32_t buttons = ss.readButtons();
 
   uint16_t color;
@@ -196,10 +198,8 @@ void transmitButtonCommands() {
   color = ST77XX_BLACK;
   if (!(buttons & TFTWING_BUTTON_B)) {
     // Serial.println("B");
-    color = ST77XX_YELLOW;
+    currentMenu = "mainMenu";
   }
-
-  tft->fillCircle(30, 18, 10, color);
 
 
   color = ST77XX_BLACK;
@@ -222,6 +222,131 @@ void transmitButtonCommands() {
   waitForReply();
   
 }
+
+#define ITEMS_PER_PAGE 3
+#define ITEM_HEIGHT   20
+
+// Add/remove menu items here - everything else auto-adjusts
+const char* mainMenuItems[] = {
+  "Driving",      // 0
+  "Ping ID",   // 1
+  "Receive",      // 2
+  "Check ID",      // 3
+  "HEEELP",       // 4
+  "WOOOAH"        // 5
+};
+#define MAIN_MENU_COUNT (sizeof(mainMenuItems) / sizeof(mainMenuItems[0]))
+
+// Helper: draw a single menu item at screen position
+void drawMenuItem(int menuIndex, int screenRow, bool isSelected) {
+  tft->setCursor(0, screenRow * ITEM_HEIGHT);
+  tft->setTextSize(2);
+  tft->print(isSelected ? ">" : " ");
+  tft->print(mainMenuItems[menuIndex]);
+}
+
+void mainMenuLogic(){
+  uint32_t buttons = ss.readButtons();
+  uint16_t color;
+  
+  // Clear screen once per frame (reduces flicker vs. clearing on every button press)
+  
+  // Calculate which items to show (auto-paging)
+  int currentPageStart = (selectedOption / ITEMS_PER_PAGE) * ITEMS_PER_PAGE;
+  int currentPageEnd = currentPageStart + ITEMS_PER_PAGE;
+  if (currentPageEnd > MAIN_MENU_COUNT) currentPageEnd = MAIN_MENU_COUNT;
+  
+  // Draw visible items using a loop (no more repetitive code!)
+  for (int i = currentPageStart; i < currentPageEnd; i++) {
+    int screenRow = i - currentPageStart; // 0, 1, or 2
+    drawMenuItem(i, screenRow, (i == selectedOption));
+  }
+
+  
+  // Scroll UP
+  if (!(buttons & TFTWING_BUTTON_UP) && selectedOption > 0) {
+    tft->fillScreen(ST77XX_BLACK);
+    selectedOption--;
+  }
+  
+  // Scroll DOWN  
+  if (!(buttons & TFTWING_BUTTON_DOWN) && selectedOption < MAIN_MENU_COUNT - 1) {
+    tft->fillScreen(ST77XX_BLACK);
+    selectedOption++;
+  }
+  
+  // Select option (A button)
+  if (!(buttons & TFTWING_BUTTON_A)) {
+    switch(selectedOption) {
+      case 0: currentMenu = "driving";  tft->fillScreen(ST77XX_BLACK); break;
+      case 1: currentMenu = "pingMenu"; tft->fillScreen(ST77XX_BLACK); break;              // Exit menu
+      case 2: currentMenu = "receiver"; tft->fillScreen(ST77XX_BLACK); break;
+      // Add more cases here for options 3, 4, 5, etc.
+      // case 3: /* your code */ break;
+      // case 4: /* your code */ break;
+      // case 5: /* your code */ break;
+      default: break; // Safety fallback
+    }
+  }
+}
+
+
+void receiverMenuLogic(){
+  uint32_t buttons = ss.readButtons();
+  uint16_t color;
+  tft->setCursor(0, 0);
+  tft->setTextSize(1);
+
+  String reply = waitForReply();
+  if(reply != "No Reply"){
+    tft->fillScreen(ST77XX_BLACK);
+    tft->print(reply);
+    tft->println(rf95.lastRssi(), DEC);
+  }
+  
+  if (!(buttons & TFTWING_BUTTON_B)) {
+    // Serial.println("B");
+    tft->fillScreen(ST77XX_BLACK);
+    currentMenu = "mainMenu";
+  }
+}
+
+void pingMenuLogic(){
+  tft->setCursor(0, 0);
+  tft->setTextSize(1);
+  transmitData("Ping Devices", ROVER_ID);
+  delay(10);
+  String reply = waitForReply();
+  if(reply != "No Reply"){
+    tft->print("A Device pinged back!");
+  } else{
+    tft->print("No devices in range");
+  }
+  delay(2000);
+  currentMenu = "mainMenu";
+}
+
+void drawMenu(){
+  //Menu logic where code is ran depending on menu, such as running the driving function when driving the rover
+  //Each menu would have its own function
+  if (currentMenu == "driving"){
+    buttonTransmit();
+  } 
+  
+  if (currentMenu == "mainMenu"){
+    mainMenuLogic();
+  }
+
+  if (currentMenu == "receiver"){
+    receiverMenuLogic();
+  }
+
+  if (currentMenu == "pingMenu"){
+    pingMenuLogic();
+  }
+  //This is the end of the main menu functionality
+}
+
 void handleIDDisplay() {
   if (showID) {
     // Draw small background (same size vibe as your circles)
@@ -253,23 +378,56 @@ void setup() {
   setRadioPower();      // Set transmission power
   initialiseTFT();
   pinMode(LED_BUILTIN, OUTPUT);  // Set built-in LED pin as output
+
+  tft->fillScreen(ST77XX_RED);
+  delay(100);
+  tft->fillScreen(ST77XX_GREEN);
+  delay(100);
+  tft->fillScreen(ST77XX_BLUE);
+  delay(100);
+  tft->fillScreen(ST77XX_BLACK);
+  delay(100);
+  tft->setTextWrap(true);
+  tft->setCursor(0, 0);
+  tft->setTextColor(ST77XX_WHITE);
+  tft->setTextSize(2);
+  tft->println("Welcome To");
+  tft->println("SITH OS");
+  //SITH = Super Intelligent Telecoms Home
+  tft->setTextSize(1);
+  tft->println("");
+  tft->println("Super Intelligent Tele Home");
+  delay(2000);
+  tft->fillScreen(ST77XX_BLACK);
+  tft->setCursor(0, 0);
+  tft->setTextSize(2);
 }
 
 
 // Main loop runs repeatedly after setup
 void loop() {
+  String shortReply;
   unsigned long currentTime = millis();
   unsigned long elapsedTime = currentTime - startTime;
-  if (elapsedTime >= 300){
-    transmitButtonCommands();
-    startTime = currentTime; 
+  if (currentMenu == "driving"){
+    if (elapsedTime >= 300){
+      buttonTransmit();
+      startTime = currentTime; 
+    }
+    transmitStopCommand();
   }
-  transmitStopCommand();
+  
+
   // Uncomment one of the following for debugging transmission
 
   // debugTransmissionSimple();  // Send a test message
   // debugTransmissionButton();    // Send message when button is pressed
   // cycleBasicCommands();
-  handleIDDisplay();
-  delay(10);  // Wait 1 second before next loop iteration
+  
+  shortReply = waitForReplyShort();
+  if (shortReply == String(ROVER_ID) + ",Ping Devices"){
+    transmitData("Controller", ROVER_ID);
+  }
+  drawMenu();
+  delay(90);
 }
